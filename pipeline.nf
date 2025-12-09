@@ -126,7 +126,7 @@ process trimmomatic {
         ${fastq1} ${fastq2} \
         ${sample_id}_trimmed_1P.fastq.gz ${sample_id}_trimmed_1U.fastq.gz \
         ${sample_id}_trimmed_2P.fastq.gz ${sample_id}_trimmed_2U.fastq.gz \
-        SLIDINGWINDOW:4:20 MINLEN:60 
+        TRAILING:20 LEADING:20 SLIDINGWINDOW:4:20 MINLEN:60 
     """
 }
 
