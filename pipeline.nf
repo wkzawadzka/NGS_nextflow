@@ -78,7 +78,7 @@ process downloadSamples {
     script:
     """
     # if [ ! -f "data/${sample_id}/${sample_id}_1.fastq.gz" ]; then
-    fastq-dump -X 1000000 --gzip --split-files ${sample_id} 
+    fastq-dump -X 5000000 --gzip --split-files ${sample_id} 
     """
 }
 
