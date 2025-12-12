@@ -471,12 +471,16 @@ process filter_gatk_variants {
 
     output:
     path "gatk_snps.vcf.gz", emit: gatk_snps
+    path "gatk_variant_counts.txt", emit: variant_counts
 
     publishDir "${params.out_dir}/variants", mode: 'copy', overwrite: true
 
     script:
     """
     gatk IndexFeatureFile -I ${gatk_vcf}
+
+    num_before=\$(bcftools view -H ${gatk_vcf} | wc -l)
+    echo "Before filtration: $num_before" > gatk_variant_counts.txt
 
     # https://gatk.broadinstitute.org/hc/en-us/articles/360035890471-Hard-filtering-germline-short-variants
     gatk VariantFiltration \
@@ -492,18 +496,28 @@ process filter_gatk_variants {
         --filter-name "RootMeansSquared_MeanQuality_lt_40" \
         --filter-expression "MQ < 40.0" \
 
-    # select SNPs only
+    # exclude filtered
     gatk SelectVariants \
         -V gatk_filtered.vcf.gz \
         -R ${ref_fa} \
         --exclude-filtered \
         -O gatk_filtered2.vcf.gz
 
+    num_v=\$(bcftools view -H gatk_filtered2.vcf.gz | wc -l)
+    echo "After GATK hard filtration: $num_v" >> gatk_variant_counts.txt
+
     # remove indels
-    bcftools view -v snps gatk_filtered2.vcf.gz -Oz -o gatk_snps.vcf.gz
+    # bcftools view -v snps gatk_filtered2.vcf.gz -Oz -o gatk_snps.vcf.gz
+    # lub można grep po ref/... czy więcej niż 1 character = nie snp
+
+    gatk SelectVariants \
+        -V gatk_filtered2.vcf.gz \
+        -select-type SNP \
+        -O gatk_snps.vcf.gz
 
     num_snps=\$(bcftools view -H gatk_snps.vcf.gz | wc -l)
     echo "[INFO] Number of SNPs for GATK: \$num_snps"
+    echo "After SNP filtration: $num_snps" >> gatk_variant_counts.txt
 
     """
 }
@@ -517,16 +531,21 @@ process filter_bcftools_variants {
 
     output:
     path "bcftools_snps.vcf.gz", emit: bcftools_snps
+    path "bcftools_variant_counts.txt", emit: variant_counts
 
     publishDir "${params.out_dir}/variants", mode: 'copy', overwrite: true
 
     script:
     """
     echo "[INFO] starting bcftools filtering on ${bcftools_vcf}"
+    before=\$(bcftools view -H ${bcftools_vcf}  | wc -l)
+    echo "Before any filtration: $before" > bcftools_variant_counts.txt
 
     # Remove 2 or more alleles
     bcftools view -i 'N_ALT=1' ${bcftools_vcf} -Oz -o step1.vcf.gz
     bcftools index step1.vcf.gz
+    after_all=\$(bcftools view -H step1.vcf.gz  | wc -l)
+    echo "After removal of 2 or more alleles: $after_all" >> bcftools_variant_counts.txt
 
     # Filter by QUAL
     bcftools view -i 'QUAL>=30' step1.vcf.gz -Oz -o step2.vcf.gz
@@ -534,10 +553,17 @@ process filter_bcftools_variants {
 
     # saving qality scores, nice to do mean, meadian etc stats plots e.g. in R later on
     bcftools query -f '%QUAL\\n' step2.vcf.gz > bcftools_quals.txt
+    after_qual=\$(bcftools view -H step2.vcf.gz  | wc -l)
+    echo "After quality >=30 filtration: $after_qual" >> bcftools_variant_counts.txt
 
     # min & max coverage depth
+    # the DP value in the INFO is the sum of the DP value over all samples in your vcf at this position.
+    # The DP value in the FORMAT column in the read depth for the given sample at this position. 
+    # If you just have one sample this value should be equal.
     bcftools view -i 'INFO/DP>=2 && INFO/DP<=10' step2.vcf.gz -Oz -o step3.vcf.gz
     bcftools index step3.vcf.gz
+    after_dp=\$(bcftools view -H step2.vcf.gz  | wc -l)
+    echo "After INFO/DP filtration: $after_dp" >> bcftools_variant_counts.txt
 
     # remove variants with the same basepair position (if two variants have the same bp position both are remove)
     # - Resolves issue with SNP and INDEL calls at same position
@@ -553,12 +579,16 @@ process filter_bcftools_variants {
     fi
     bcftools index bcftools_filtered.vcf.gz
 
+    after_dup=\$(bcftools view -H bcftools_filtered.vcf.gz  | wc -l)
+    echo "After removal of variants with same basepair position: $after_dup" >> bcftools_variant_counts.txt
+
     # remove indels
     bcftools view -v snps bcftools_filtered.vcf.gz -Oz -o bcftools_snps.vcf.gz
     bcftools index bcftools_snps.vcf.gz
 
     num_snps=\$(bcftools view -H bcftools_snps.vcf.gz | wc -l)
-    echo "[INFO] Number of SNPs for BCFtools: \$num_snps"
+    echo "[INFO] After removal of indels: number of SNPs for BCFtools: \$num_snps"
+    echo "After SNP filtration: $num_snps" >> bcftools_variant_counts.txt
     """
 }
 
