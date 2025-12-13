@@ -506,18 +506,19 @@ process filter_gatk_variants {
     num_v=\$(bcftools view -H gatk_filtered2.vcf.gz | wc -l)
     echo "After GATK hard filtration: \$num_v" >> gatk_variant_counts.txt
 
-    # remove indels
-    # bcftools view -v snps gatk_filtered2.vcf.gz -Oz -o gatk_snps.vcf.gz
-    # lub można grep po ref/... czy więcej niż 1 character = nie snp
-
     gatk SelectVariants \
         -V gatk_filtered2.vcf.gz \
         -select-type SNP \
-        -O gatk_snps.vcf.gz
+        -O gatk_snps_fil.vcf.gz
+    num_sel_var=\$(bcftools view -H gatk_snps_fil.vcf.gz | wc -l)
+    echo "After SNP selection with SelectVariants: \$num_sel_var" >> gatk_variant_counts.txt
+
+    # remove multiallelic
+    zcat gatk_snps_fil.vcf.gz | awk '/^#/ {print; next} length($5) == 1 {print}' | bgzip > gatk_snps.vcf.gz
 
     num_snps=\$(bcftools view -H gatk_snps.vcf.gz | wc -l)
     echo "[INFO] Number of SNPs for GATK: \$num_snps"
-    echo "After SNP filtration: \$num_snps" >> gatk_variant_counts.txt
+    echo "After removing multiallelic: \$num_snps" >> gatk_variant_counts.txt
 
     """
 }
