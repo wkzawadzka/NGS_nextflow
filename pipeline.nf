@@ -562,7 +562,7 @@ process filter_bcftools_variants {
     # If you just have one sample this value should be equal.
     bcftools view -i 'INFO/DP>=2 && INFO/DP<=10' step2.vcf.gz -Oz -o step3.vcf.gz
     bcftools index step3.vcf.gz
-    after_dp=\$(bcftools view -H step2.vcf.gz  | wc -l)
+    after_dp=\$(bcftools view -H step3.vcf.gz  | wc -l)
     echo "After INFO/DP filtration: \$after_dp" >> bcftools_variant_counts.txt
 
     # remove variants with the same basepair position (if two variants have the same bp position both are remove)
